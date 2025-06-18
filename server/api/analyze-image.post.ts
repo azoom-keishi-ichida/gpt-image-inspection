@@ -1,15 +1,15 @@
-import { OpenAI } from 'openai'
+import { OpenAI, toFile } from 'openai'
 
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig()
   const body = await readBody(event)
   
-  const { imageBase64, prompt, size, quality, apiKey } = body
+  const { images, prompt, size, quality, apiKey } = body
   
-  if (!prompt || !apiKey) {
+  if (!prompt || !apiKey || !images?.length) {
     throw createError({
       statusCode: 400,
-      statusMessage: 'Missing required fields: prompt and apiKey'
+      statusMessage: '必須項目が不足しています: プロンプト、APIキー、および少なくとも1つの画像が必要です'
     })
   }
 
@@ -24,48 +24,34 @@ export default defineEventHandler(async (event) => {
   console.log('apiKey:', apiKey)
 
   try {
-    // Initialize OpenAI client
     const openai = new OpenAI({
       apiKey: apiKey
     })
 
-    let response
-
-    if(!imageBase64) {
-
-      response = await openai.images.generate({
-        model: "gpt-image-1",
-        prompt: prompt,
-        size: selectedSize as "1024x1024" | "1024x1536" | "1536x1024",
-        quality: quality || "medium",
-        n: 1
+    // 複数の画像をFileオブジェクトに変換
+    const imageFiles = await Promise.all(
+      images.map(async (imgBase64: string, index: number) => {
+        const buffer = Buffer.from(imgBase64, 'base64')
+        return await toFile(buffer, `image-${index}.png`, { type: 'image/png' })
       })
-    } else {
-      // Convert base64 to File for image editing
-      const imageBuffer = Buffer.from(imageBase64, 'base64')
-      const imageFile = new File([imageBuffer], 'image.png', { type: 'image/png' })
-      
-      response = await openai.images.edit({
-        model: "gpt-image-1", 
-        image: imageFile,
-        prompt,
-        size: selectedSize as "1024x1024" | "1024x1536" | "1536x1024",
-        quality: quality || "medium",
-        n: 1
-      })
-    }
+    )
 
-    // Get base64 encoded image data
-    const imageData = response.data[0].b64_json
-    const imageDataUrl = `data:image/png;base64,${imageData}`
-    
+    // 複数画像を1つのリクエストで送信
+    const response = await openai.images.edit({
+      model: "gpt-image-1",
+      image: imageFiles,
+      prompt,
+      size: selectedSize as "1024x1024" | "1024x1536" | "1536x1024",
+      quality: quality || "medium",
+      n: 1
+    })
+
     return {
       success: true,
       imageUrl: null,
-      imageData: imageDataUrl,
+      imageData: `data:image/png;base64,${response.data[0].b64_json}`,
       selectedSize,
-      originalPrompt: prompt,
-      rawResponse: null
+      originalPrompt: prompt
     }
   } catch (error) {
     console.error('Error calling GPT-Image-1 API:', error)

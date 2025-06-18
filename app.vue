@@ -41,19 +41,36 @@
           </template>
           
           <div class="space-y-6">
-            <div>
-              <label class="block text-sm font-medium mb-2">画像を選択</label>
+            <UFormGroup label="画像を選択 (複数選択可)" required>
               <input
                 ref="fileInput"
                 type="file"
                 accept="image/*"
+                multiple
                 @change="handleFileUpload"
                 class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
               />
-            </div>
+            </UFormGroup>
 
-            <div v-if="previewUrl" class="text-center">
-              <img :src="previewUrl" alt="Preview" class="max-w-full max-h-64 mx-auto rounded-lg shadow-md" />
+            <!-- 画像プレビューエリア -->
+            <div v-if="previewUrls.length > 0" class="mt-4">
+              <h3 class="text-sm font-medium mb-2">選択された画像 ({{ previewUrls.length }})</h3>
+              <div class="grid grid-cols-3 gap-4">
+                <div v-for="(url, index) in previewUrls" :key="index" class="relative group">
+                  <img 
+                    :src="url" 
+                    :alt="`プレビュー ${index + 1}`" 
+                    class="w-full h-32 object-cover rounded-lg border border-gray-200"
+                  />
+                  <button
+                    @click.stop="removeImage(index)"
+                    class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600 transition-colors"
+                    title="画像を削除"
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
             </div>
 
             <UFormGroup label="画像解析サイズ" required>
@@ -85,12 +102,12 @@
             <UButton
               @click="generateImage"
               :loading="isGenerating"
-              :disabled="!apiKey || !prompt"
+              :disabled="!apiKey || !prompt || !imageBase64.length"
               color="primary"
               size="lg"
               block
             >
-              {{ isGenerating ? (imageBase64 ? '編集中...' : '生成中...') : (imageBase64 ? '画像を編集' : '画像を生成') }}
+              {{ isGenerating ? '処理中...' : '画像を生成' }}
             </UButton>
           </div>
         </UCard>
@@ -158,8 +175,8 @@
 
 <script setup>
 const apiKey = ref('')
-const imageBase64 = ref('')
-const previewUrl = ref('')
+const imageBase64 = ref([])
+const previewUrls = ref([])
 const prompt = ref('美しい桜の木の下で読書する猫、水彩画風')
 const selectedSize = ref('medium')
 const selectedQuality = ref('medium')
@@ -179,30 +196,56 @@ const qualityOptions = [
   { label: 'High - 高品質', value: 'high' }
 ]
 
-const handleFileUpload = (event) => {
-  const file = event.target.files[0]
-  if (!file) return
+const handleFileUpload = async (event) => {
+  const files = Array.from(event.target.files || [])
+  if (!files.length) return
 
-  const reader = new FileReader()
-  reader.onload = (e) => {
-    previewUrl.value = e.target.result
-    imageBase64.value = e.target.result.split(',')[1]
+  // Ctrl/Cmdキーが押されていない場合は前の選択をクリア
+  if (!event.ctrlKey && !event.metaKey) {
+    previewUrls.value = []
+    imageBase64.value = []
   }
-  reader.readAsDataURL(file)
+
+  // 新しいファイルを処理
+  for (const file of files) {
+    if (!file.type.startsWith('image/')) continue
+    
+    const dataUrl = await new Promise((resolve) => {
+      const reader = new FileReader()
+      reader.onload = (e) => resolve(e.target.result)
+      reader.readAsDataURL(file)
+    })
+    
+    previewUrls.value.push(dataUrl)
+    imageBase64.value.push(dataUrl.split(',')[1])
+  }
+
+  // 同じファイルを再度選択できるようにリセット
+  if (fileInput.value) {
+    fileInput.value.value = ''
+  }
+}
+
+const removeImage = (index) => {
+  previewUrls.value.splice(index, 1)
+  imageBase64.value.splice(index, 1)
 }
 
 const generateImage = async () => {
-  if (!apiKey.value || !prompt.value) return
+  if (!apiKey.value || !prompt.value || !imageBase64.value.length) {
+    error.value = 'APIキー、プロンプト、および少なくとも1つの画像が必要です'
+    return
+  }
 
   isGenerating.value = true
   error.value = ''
   result.value = null
 
   try {
-    const response = await $fetch('/api/analyze-image', {
+    const { data, error: apiError } = await useFetch('/api/analyze-image', {
       method: 'POST',
       body: {
-        imageBase64: imageBase64.value,
+        images: imageBase64.value,
         prompt: prompt.value,
         size: selectedSize.value,
         quality: selectedQuality.value,
@@ -210,9 +253,14 @@ const generateImage = async () => {
       }
     })
 
-    result.value = response
+    if (apiError.value) {
+      throw new Error(apiError.value.message || 'APIエラーが発生しました')
+    }
+
+    result.value = data.value
   } catch (err) {
-    error.value = err.data?.message || err.message || '予期しないエラーが発生しました'
+    console.error('Error:', err)
+    error.value = err.message || '画像の生成中にエラーが発生しました'
   } finally {
     isGenerating.value = false
   }
