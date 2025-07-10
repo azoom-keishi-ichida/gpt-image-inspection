@@ -14,7 +14,7 @@
               <div class="p-3 bg-white rounded border-l-4 border-green-500">
                 <h4 class="font-semibold text-green-700">🎨 画像生成</h4>
                 <p class="text-xs mt-1">テキストのみ入力</p>
-                <p class="text-xs">DALL-E 3で新しい画像を生成</p>
+                <p class="text-xs">新しい画像を生成</p>
               </div>
               <div class="p-3 bg-white rounded border-l-4 border-blue-500">
                 <h4 class="font-semibold text-blue-700">✏️ 画像編集</h4>
@@ -514,10 +514,10 @@ const getModeTitle = () => {
 
 const getModeDescription = () => {
   switch (currentMode.value) {
-    case 'generate': return 'DALL-E 3で新しい画像を生成します'
+    case 'generate': return '新しい画像を生成します'
     case 'edit': return 'GPT-Image-1で既存の画像を編集します'
     case 'inpaint': return 'マスクした部分のみを修正します'
-    default: return 'DALL-E 3で新しい画像を生成します'
+    default: return '新しい画像を生成します'
   }
 }
 
@@ -601,7 +601,7 @@ const generateImage = async () => {
 
 const getModeDisplayName = (mode) => {
   switch (mode) {
-    case 'generate': return '画像生成 (DALL-E 3)'
+    case 'generate': return '画像生成 (GPT-Image-1)'
     case 'edit': return '画像編集 (GPT-Image-1)'
     case 'inpaint': return '部分修正 (GPT-Image-1 + Mask)'
     default: return mode

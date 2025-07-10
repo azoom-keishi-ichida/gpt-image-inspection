@@ -47,13 +47,11 @@ export default defineEventHandler(async (event) => {
     let response
 
     if (mode === 'generate') {
-      // 画像生成モード - DALL-E 3
-      console.log('Generating new image with DALL-E 3')
       response = await client.images.generate({
-        model: "dall-e-3",
+        model: "gpt-image-1",
         prompt,
-        size: selectedSize as "1024x1024" | "1024x1792" | "1792x1024",
-        quality: quality || "standard",
+        size: 'auto',
+        quality: quality || "medium",
         n: 1
       })
     } else if (mode === 'inpaint') {
