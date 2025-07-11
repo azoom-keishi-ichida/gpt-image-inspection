@@ -73,13 +73,15 @@ export default defineEventHandler(async (event) => {
       }
 
       // Base64から画像ファイルを作成
-      const imageBuffer = Buffer.from(images[0], 'base64')
+      const cleanImage = images[0].replace(/^data:image\/[a-z]+;base64,/, '')
+      const imageBuffer = Buffer.from(cleanImage, 'base64')
       const imageFile = await toFile(imageBuffer, "image.png", {
         type: "image/png",
       })
 
       // Base64からマスクファイルを作成
-      const maskBuffer = Buffer.from(mask, 'base64')
+      const cleanMask = mask.replace(/^data:image\/[a-z]+;base64,/, '')
+      const maskBuffer = Buffer.from(cleanMask, 'base64')
       const maskFile = await toFile(maskBuffer, "mask.png", {
         type: "image/png",
       })

@@ -562,36 +562,34 @@ const applyMask = () => {
   const editedDataUrl = canvasRef.value.toDataURL('image/png')
   const editedBase64 = editedDataUrl.split(',')[1]
   
-  // アルファチャンネル付きマスクデータを生成（透明部分が編集対象、不透明部分が保護対象）
+  // OpenAI API用のマスクデータを生成
   const maskCanvas = document.createElement('canvas')
   maskCanvas.width = canvasWidth.value
   maskCanvas.height = canvasHeight.value
   const maskCtx = maskCanvas.getContext('2d')
   
-  // マスクキャンバスを不透明な黒で塗りつぶし（保護される部分）
-  maskCtx.fillStyle = 'rgba(0, 0, 0, 1)'
+  // マスクキャンバスを黒で塗りつぶし（保護される部分）
+  maskCtx.fillStyle = 'rgba(0, 0, 0, 255)'
   maskCtx.fillRect(0, 0, maskCanvas.width, maskCanvas.height)
   
   // 元のキャンバスから描画された部分を取得
   const imageData = canvasRef.value.getContext('2d').getImageData(0, 0, canvasWidth.value, canvasHeight.value)
   const data = imageData.data
   
-  // 描画された部分を透明にして編集対象に設定
-  const maskImageData = maskCtx.getImageData(0, 0, maskCanvas.width, maskCanvas.height)
-  const maskData = maskImageData.data
-  
+  // 描画された部分を白色にして編集対象に設定
   for (let i = 0; i < data.length; i += 4) {
     const alpha = data[i + 3]
     if (alpha > 0) {
-      // 描画された部分を透明にする（編集対象）
-      maskData[i] = 0     // R
-      maskData[i + 1] = 0 // G  
-      maskData[i + 2] = 0 // B
-      maskData[i + 3] = 0 // A (透明 = 編集対象)
+      // 描画された部分の座標を計算
+      const pixelIndex = i / 4
+      const x = pixelIndex % canvasWidth.value
+      const y = Math.floor(pixelIndex / canvasWidth.value)
+      
+      // 描画された部分を白色にする（編集対象）
+      maskCtx.fillStyle = 'rgba(255, 255, 255, 255)'
+      maskCtx.fillRect(x, y, 1, 1)
     }
   }
-  
-  maskCtx.putImageData(maskImageData, 0, 0)
   
   const maskDataUrl = maskCanvas.toDataURL('image/png')
   const maskBase64 = maskDataUrl.split(',')[1]
@@ -600,7 +598,7 @@ const applyMask = () => {
     editedImageLength: editedBase64.length,
     maskLength: maskBase64.length,
     format: 'Alpha channel mask with transparent editing areas',
-    workflow: 'Transparent areas = edit target, opaque areas = protected'
+    workflow: 'White areas = edit target, black areas = protected'
   })
   
   emit('mask-created', {
