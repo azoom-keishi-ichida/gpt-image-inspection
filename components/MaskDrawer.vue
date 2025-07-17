@@ -92,7 +92,7 @@
             ref="maskCanvasRef"
             :width="canvasWidth"
             :height="canvasHeight"
-            class="absolute top-0 left-0 opacity-0 pointer-events-none"
+            class="absolute inset-0 opacity-0 pointer-events-none w-full h-full object-contain"
           />
           
           <!-- プレビューキャンバス（視覚的フィードバック用） -->
@@ -100,7 +100,7 @@
             ref="previewCanvasRef"
             :width="canvasWidth"
             :height="canvasHeight"
-            class="absolute top-0 left-0 cursor-crosshair rounded-lg"
+            class="absolute inset-0 cursor-crosshair rounded-lg w-full h-full object-contain"
             :style="canvasStyle"
             @mousedown="handleMouseDown"
             @mousemove="draw"
@@ -177,14 +177,11 @@ const hasMaskData = computed(() => {
 })
 
 const canvasStyle = computed(() => {
-  if (!baseImageRef.value) return {}
-  
-  const img = baseImageRef.value
-  const rect = img.getBoundingClientRect()
-  
   return {
-    width: `${rect.width}px`,
-    height: `${rect.height}px`
+    width: '100%',
+    height: '100%',
+    maxWidth: '100%',
+    maxHeight: '100%'
   }
 })
 
@@ -237,15 +234,22 @@ const onImageError = (error) => {
 }
 
 const getCanvasCoordinates = (e) => {
-  const canvas = maskCanvasRef.value
-  const rect = canvas.getBoundingClientRect()
-  const scaleX = canvasWidth.value / rect.width
-  const scaleY = canvasHeight.value / rect.height
+  if (!previewCanvasRef.value || !baseImageRef.value) return { x: 0, y: 0 }
   
-  return {
-    x: (e.clientX - rect.left) * scaleX,
-    y: (e.clientY - rect.top) * scaleY
-  }
+  const canvas = previewCanvasRef.value
+  const img = baseImageRef.value
+  const canvasRect = canvas.getBoundingClientRect()
+  const imgRect = img.getBoundingClientRect()
+  
+  // 画像の表示サイズと実際のサイズの比率を計算
+  const scaleX = canvasWidth.value / imgRect.width
+  const scaleY = canvasHeight.value / imgRect.height
+  
+  // マウス座標を画像基準に変換
+  const x = (e.clientX - imgRect.left) * scaleX
+  const y = (e.clientY - imgRect.top) * scaleY
+  
+  return { x, y }
 }
 
 const startDrawing = (e) => {
