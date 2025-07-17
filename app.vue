@@ -297,33 +297,13 @@
           </div>
         </UCard>
 
-        <!-- マスク描画モーダル -->
-        <UModal v-model="showMaskDrawer" :ui="{ width: 'max-w-6xl' }">
-          <UCard>
-            <template #header>
-              <div class="flex items-center justify-between">
-                <h3 class="text-lg font-semibold">マスクを描画</h3>
-                <UButton
-                  color="gray"
-                  variant="ghost"
-                  icon="i-heroicons-x-mark"
-                  @click="showMaskDrawer = false"
-                />
-              </div>
-            </template>
-            
-            <div v-if="showMaskDrawer" class="p-4">
-              <MaskDrawer
-                v-if="previewUrls.length > 0"
-                :base-image="previewUrls[0]"
-                @mask-created="onMaskCreated"
-              />
-              <div v-else class="text-center py-8 text-gray-500">
-                画像が選択されていません
-              </div>
-            </div>
-          </UCard>
-        </UModal>
+        <!-- マスク描画スライドオーバー -->
+        <MaskDrawer
+          v-if="previewUrls.length > 0"
+          v-model="showMaskDrawer"
+          :base-image="previewUrls[0]"
+          @mask-created="onMaskCreated"
+        />
       </div>
     </div>
   </div>
