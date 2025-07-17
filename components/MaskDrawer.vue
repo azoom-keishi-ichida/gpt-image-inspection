@@ -87,9 +87,17 @@
             @error="onImageError"
           />
           
-          <!-- マスクオーバーレイキャンバス -->
+          <!-- マスクキャンバス（非表示、API用） -->
           <canvas
             ref="maskCanvasRef"
+            :width="canvasWidth"
+            :height="canvasHeight"
+            class="absolute top-0 left-0 opacity-0 pointer-events-none"
+          />
+          
+          <!-- プレビューキャンバス（視覚的フィードバック用） -->
+          <canvas
+            ref="previewCanvasRef"
             :width="canvasWidth"
             :height="canvasHeight"
             class="absolute top-0 left-0 cursor-crosshair rounded-lg"
@@ -153,6 +161,7 @@ const isOpen = computed({
 })
 
 const maskCanvasRef = ref(null)
+const previewCanvasRef = ref(null)
 const baseImageRef = ref(null)
 const tool = ref('brush')
 const brushSize = ref(15)
@@ -200,14 +209,26 @@ const initCanvas = () => {
 }
 
 const onImageLoad = () => {
-  if (!baseImageRef.value) return
+  if (!baseImageRef.value || !maskCanvasRef.value || !previewCanvasRef.value) return
   
   const img = baseImageRef.value
+  const maskCanvas = maskCanvasRef.value
+  const previewCanvas = previewCanvasRef.value
+  
+  // キャンバスサイズを画像に合わせる
   canvasWidth.value = img.naturalWidth
   canvasHeight.value = img.naturalHeight
   
+  // キャンバスを初期化
   nextTick(() => {
-    initCanvas()
+    // マスクキャンバス（API用）を初期化
+    const maskCtx = maskCanvas.getContext('2d')
+    maskCtx.fillStyle = 'rgba(0, 0, 0, 1)'
+    maskCtx.fillRect(0, 0, maskCanvas.width, maskCanvas.height)
+    
+    // プレビューキャンバスをクリア
+    const previewCtx = previewCanvas.getContext('2d')
+    previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height)
   })
 }
 
@@ -259,40 +280,73 @@ const stopDrawing = () => {
 }
 
 const drawStroke = (stroke) => {
-  if (!maskCanvasRef.value || !stroke.points || stroke.points.length === 0) return
+  if (!maskCanvasRef.value || !previewCanvasRef.value || !stroke.points || stroke.points.length === 0) return
   
-  const canvas = maskCanvasRef.value
-  const ctx = canvas.getContext('2d')
+  const maskCanvas = maskCanvasRef.value
+  const previewCanvas = previewCanvasRef.value
+  const maskCtx = maskCanvas.getContext('2d')
+  const previewCtx = previewCanvas.getContext('2d')
   
-  ctx.lineWidth = stroke.brushSize || brushSize.value
-  ctx.lineCap = 'round'
-  ctx.lineJoin = 'round'
+  const lineWidth = stroke.brushSize || brushSize.value
+  
+  // マスクキャンバス（API用）に描画
+  maskCtx.lineWidth = lineWidth
+  maskCtx.lineCap = 'round'
+  maskCtx.lineJoin = 'round'
   
   if (stroke.tool === 'brush') {
-    ctx.globalCompositeOperation = 'source-over'
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)' // 半透明の白でマスク表示
+    // ブラシ：透明にくり抜く（編集対象領域）
+    maskCtx.globalCompositeOperation = 'destination-out'
   } else if (stroke.tool === 'eraser') {
-    ctx.globalCompositeOperation = 'destination-out'
+    // 消しゴム：黒で塗り直す（保持領域に戻す）
+    maskCtx.globalCompositeOperation = 'source-over'
+    maskCtx.strokeStyle = 'rgba(0, 0, 0, 1)'
   }
   
-  ctx.beginPath()
-  ctx.moveTo(stroke.points[0].x, stroke.points[0].y)
-  
+  maskCtx.beginPath()
+  maskCtx.moveTo(stroke.points[0].x, stroke.points[0].y)
   for (let i = 1; i < stroke.points.length; i++) {
-    ctx.lineTo(stroke.points[i].x, stroke.points[i].y)
+    maskCtx.lineTo(stroke.points[i].x, stroke.points[i].y)
+  }
+  maskCtx.stroke()
+  
+  // プレビューキャンバス（視覚的フィードバック用）に描画
+  previewCtx.lineWidth = lineWidth
+  previewCtx.lineCap = 'round'
+  previewCtx.lineJoin = 'round'
+  
+  if (stroke.tool === 'brush') {
+    // ブラシ：半透明の白で表示
+    previewCtx.globalCompositeOperation = 'source-over'
+    previewCtx.strokeStyle = 'rgba(255, 255, 255, 0.7)'
+  } else if (stroke.tool === 'eraser') {
+    // 消しゴム：描画を消去
+    previewCtx.globalCompositeOperation = 'destination-out'
   }
   
-  ctx.stroke()
+  previewCtx.beginPath()
+  previewCtx.moveTo(stroke.points[0].x, stroke.points[0].y)
+  for (let i = 1; i < stroke.points.length; i++) {
+    previewCtx.lineTo(stroke.points[i].x, stroke.points[i].y)
+  }
+  previewCtx.stroke()
 }
 
 const redrawAllStrokes = () => {
-  if (!maskCanvasRef.value) return
+  if (!maskCanvasRef.value || !previewCanvasRef.value) return
   
-  const canvas = maskCanvasRef.value
-  const ctx = canvas.getContext('2d')
+  const maskCanvas = maskCanvasRef.value
+  const previewCanvas = previewCanvasRef.value
+  const maskCtx = maskCanvas.getContext('2d')
+  const previewCtx = previewCanvas.getContext('2d')
   
-  // キャンバスをクリア
-  ctx.clearRect(0, 0, canvas.width, canvas.height)
+  // マスクキャンバスをクリアして初期状態に戻す
+  maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height)
+  maskCtx.fillStyle = 'rgba(0, 0, 0, 1)'
+  maskCtx.fillRect(0, 0, maskCanvas.width, maskCanvas.height)
+  
+  // プレビューキャンバスをクリア
+  previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height)
   
   // すべてのストロークを再描画
   strokes.value.forEach(stroke => {
@@ -345,43 +399,25 @@ const closeDrawer = () => {
 const saveMask = () => {
   if (!maskCanvasRef.value || strokes.value.length === 0) return
   
-  // マスクデータを白黒に変換
+  // 現在のマスクキャンバスをそのまま使用
   const canvas = maskCanvasRef.value
-  const tempCanvas = document.createElement('canvas')
-  tempCanvas.width = canvas.width
-  tempCanvas.height = canvas.height
-  const tempCtx = tempCanvas.getContext('2d')
   
-  // 背景を黒に
-  tempCtx.fillStyle = 'black'
-  tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height)
-  
-  // マスク部分を白に
-  tempCtx.globalCompositeOperation = 'source-over'
-  tempCtx.strokeStyle = 'white'
-  tempCtx.lineCap = 'round'
-  tempCtx.lineJoin = 'round'
-  
-  strokes.value.forEach(stroke => {
-    if (!stroke.points || stroke.points.length === 0) return
-    
-    tempCtx.lineWidth = stroke.brushSize || 15
-    tempCtx.beginPath()
-    tempCtx.moveTo(stroke.points[0].x, stroke.points[0].y)
-    
-    for (let i = 1; i < stroke.points.length; i++) {
-      tempCtx.lineTo(stroke.points[i].x, stroke.points[i].y)
-    }
-    
-    tempCtx.stroke()
-  })
-  
-  const dataUrl = tempCanvas.toDataURL('image/png')
+  // PNG形式でマスクデータを生成
+  const dataUrl = canvas.toDataURL('image/png')
   const base64 = dataUrl.split(',')[1]
+  
+  console.log('Generated mask:', {
+    width: canvas.width,
+    height: canvas.height,
+    dataUrlLength: dataUrl.length,
+    base64Length: base64.length
+  })
   
   emit('mask-created', {
     dataUrl,
-    base64
+    base64,
+    width: canvas.width,
+    height: canvas.height
   })
   
   closeDrawer()
